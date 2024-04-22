@@ -1,0 +1,159 @@
+---
+title: "Text mining"
+subtitle: 'Działanie oraz zastosowanie' 
+author: 
+  name: 'Adrian Pilarczyk'
+output:
+  html_document:
+    theme: readable
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+Proces pozyskiwania wartościowych informacji i wiedzy z dużych ilości nieustrukturyzowanych tekstów. Używa różnych technik analitycznych, takich jak przetwarzanie języka naturalnego, analiza sentymentów, ekstrakcja informacji i klastrowanie, aby identyfikować wzorce, trendy i relacje w danych tekstowych. 
+
+Można go używać do automatycznego podsumowywania dokumentów, klasyfikowania treści, identyfikowania trendów.
+
+Dzięki text mining, organizacje mogą przetwarzać i analizować duże zbiory danych tekstowych, co pozwala na szybsze podejmowanie decyzji, lepsze zrozumienie rynku i klientów, a także identyfikację nowych możliwości biznesowych i obszarów ryzyka.
+
+Przejdźmy do przykładów, które pokazują nam zastosowanie text mining. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+install.packages("topicmodels")
+install.packages("tidytext")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("textdata")
+install.packages("reshape2")
+
+```
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(topicmodels)
+library(tidytext)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(janeaustenr)
+library(stringr)
+```
+
+Wprowadzenie zbioru danych, który zawiera częstość występowania unikalnych słów w dokumentach:
+
+```{r}
+data("AssociatedPress")
+AssociatedPress
+```
+
+Aby rozpocząć eksploracje tematu, zaczniemy od modelu LDA. Model ten znajduje mieszanine słów powiazaną z tematem, a także określa temat powiązany z podanymi słowami. Istnieje wiele implementacji tego algoryrtmu. 
+
+Zaimplementowanie pierwszego modelu LDA, ustawiając k = 2, aby utworzyć dwutematyczny model LDA:
+
+```{r}
+ap_lda <- LDA(AssociatedPress, k = 2, control = list(seed = 1234))
+ap_lda
+```
+Następnie porządkujemy obiekty modelu. Pakiet tidytext udostępnia tę metodę wyodrębniania prawdopodobieństw dla poszczególnych tematów i słów, zwaną $\deta$ z modelu:
+
+```{r}
+ap_topics <- tidy(ap_lda, matrix = "beta")
+ap_topics
+```
+
+Dla każdej kombinacji model oblicza prawdopodobieństwo wygenerowania tego obiektu na podstawie wybranego tematu. Na przykład termin „aaron” ma
+$1,68*10^{-12}$ prawdopodobieństwo wygenerowania z tematu 1, ale $3,89*10^{−5}$ prawdopodobieństwo wygenerowania z tematu 2.
+
+Jednak z takiej listy możemy mało co wyczytać. Stwórzmy wykresy pokazujące 10 najliczniejszych słów z tematu 1 i 2:
+
+```{r}
+ap_top_terms <- ap_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+ap_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+```
+
+Ta wizualizacja pozwala nam zrozumieć dwa tematy wyodrębnione z artykułów. Najpopularniejsze słowa w temacie 1 sugerują nam, że może on reprezentować wiadomości biznesowe lub finansowe. Najczęstsze słowa w temacie 2 sugerują nam, że ten temat reprezentuje wiadomości polityczne. 
+
+Ważną obserwacją dotyczącą słów w każdym temacie jest to, że niektóre słowa, takie jak „nowy” i „ludzie”, są wspólne w obu tematach. Jest to zaleta modelowania tematów w porównaniu z metodami „twardego grupowania”: tematy używane w języku potocznym mogą w pewnym stopniu pokrywać się pod względem słów.
+
+
+Kiedy "posprzątamy" nasz model pod warunkiem współczynnika $\gamma$, dostaniemy model, który pokazuje procent danego tematu w konkretnym dokumencie:
+
+```{r}
+ap_documents <- tidy(ap_lda, matrix = "gamma")
+ap_documents
+```
+
+Możemy zauważyć, że w dokumencie 6 tematem przewodnim jest temat 2 w 99% procentach. Wyłonimy z niego najpopularniejsze słowa, aby ustalić temat artykułu:
+
+```{r}
+tidy(AssociatedPress) %>%
+  filter(document == 6) %>%
+  arrange(desc(count))
+```
+
+Sądząc po najpopularniejszych słowach, wydaje się, że jest to artykuł o stosunkach rządu amerykańskiego. Algorytm słusznie umieścił go w temacie 2 (jako wiadomości polityczne/krajowe).
+
+A kto powiedział, że słowa nie mają znaczenia/emocji? Istnieje wiele metod i słowników służących do oceny opinii lub emocji w tekście. Zajmiemy się jednym z nich. Leksykon $nrc$ kategoryzuje słowa w sposób binarny („tak” / „nie”) z kategorii pozytywne, negatywne, złość, entuzjastyczne, wstręt, strach, radość, smutek, zaskoczenie oraz zaufanie. Adnotacje zostały wykonane ręcznie poprzez crowdsourcing.
+
+```{r}
+get_sentiments("nrc")
+```
+
+Użyjemy tego leksykonu do zdefiniowa, czy dana książka zawiera pozytywne słowa. Skupimy się tutaj na przykładzie książki $Emma$ autorki Jane Austen. Najpierw każdą książke z zbioru danych $janeaustenr$ rozbijemy na pojedyńcze, poukładane słowa:
+
+```{r}
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+Następnie nakłady filtr, który pokaże nam najczęściej występujące "pozytywne" słowa w wybranej przez nas książce:
+
+```{r}
+nrc_positive <- get_sentiments("nrc") %>% 
+  filter(sentiment == "positive")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_positive) %>%
+  count(word, sort = TRUE)
+```
+
+Ostatecznie pokażemy wykres z ilością słów w podanej książce dla odpowiedniej kategorii emocji:
+
+```{r}
+nrc_sentiments <- get_sentiments("nrc")
+
+emma_sentiments <- tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_sentiments, by = "word", relationship = "many-to-many") %>%
+  count(sentiment, sort = TRUE)
+
+ggplot(emma_sentiments, aes(x = sentiment, y = n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Liczba słów związanych z danymi emocjami w książce 'Emma'",
+       x = "Emocje",
+       y = "Liczba słów") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set3") 
+
+```

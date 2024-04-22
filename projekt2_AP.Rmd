@@ -1,0 +1,251 @@
+---
+title: "Network visualization w R"
+subtitle: 'Działanie oraz zastosowanie' 
+author: 
+  name: 'Adrian Pilarczyk'
+output:
+  html_document:
+    theme: readable
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+Metoda wizualizacji danych sieciowych przy użyciu języka R. Dzięki bibliotekom takim jak igraph, network, ggraph, i visNetwork, R umożliwia tworzenie interaktywnych i atrakcyjnych grafik przedstawiających sieci. 
+
+Sieci te mogą reprezentować różnorodne typy danych, takie jak relacje społeczne, połączenia między stronami internetowymi, sieci neuronalne, czy też inne struktury złożone, gdzie węzły reprezentują obiekty, a krawędzie – relacje między nimi. Wizualizacja sieci w R jest użyteczna do analizy strukturalnej, odkrywania wzorców, oraz prezentacji złożonych zależności w przystępny wizualnie sposób.
+
+Przejdźmy do przykładów, które pokazują nam zastosowanie network visualization w R:
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+install.packages("igraph")
+```
+
+```{r}
+library(igraph)
+```
+Przykłady prostych grafów:
+
+```{r}
+g1 <- graph( edges=c(1,2, 2,3, 3, 1), n=3, directed=F ) 
+
+plot(g1)
+``` 
+
+
+
+```{r}
+g2 <- graph( edges=c(1,2, 2,3, 3, 1), n=10 )
+
+plot(g2) 
+```
+
+```{r}
+g3 <- graph( c("John", "Jim", "Jim", "Jill", "Jill", "John"))
+plot(g3)
+```
+
+Pakiet ten zawiera wiele opcji kosmetycznych oraz modyfikujących nasze grafy pod dane zastosowanie:
+
+```{r}
+plot(graph_from_literal(a:b:c---c:d:e))
+plot(graph_from_literal(a:b:c---c:d:e))
+```
+
+```{r}
+eg <- make_empty_graph(40)
+
+plot(eg, vertex.size=10, vertex.label=NA)
+
+fg <- make_full_graph(40)
+
+plot(fg, vertex.size=10, vertex.label=NA)
+```
+
+Można tworzyć swoje własne proste przykłady nawet pokazujące relacje między ludźmi (np. kto komu podarował prezent na urodziny):
+
+```{r}
+g4 <- graph( c("John", "Jim", "Jim", "Jack", "Jim", "Jack", "John", "John"), 
+
+             isolates=c("Jesse", "Janis", "Jennifer", "Justin") )  
+
+
+
+
+plot(g4, edge.arrow.size=.5, vertex.color="gold", vertex.size=15, 
+
+     vertex.frame.color="gray", vertex.label.color="black", 
+
+     vertex.label.cex=0.8, vertex.label.dist=2, edge.curved=0.2) 
+```
+
+
+Pakiet również pozwala sprawdzić w danym grafie krawędzie oraz wierzchołki:
+
+```{r}
+E(g4)
+```
+
+```{r}
+V(g4)
+```
+
+Można również wyświetlić macierz przedstawiającą ilość połączeń pomiędzy danymi wierzchołkami:
+
+```{r}
+g4[]
+```
+
+Dodatkowo, jeżeli da się takie informacje umieścić w tabeli, można również nadać wagę lub cechę dla danego atrybutu grafu:
+
+```{r}
+
+V(g4)$gender <- c("male", "male", "male", "male", "female", "female", "male")
+
+E(g4)$type <- "birthday" 
+
+E(g4)$weight <- 100  
+
+```
+
+```{r}
+
+edge_attr(g4)
+```
+
+```{r}
+vertex_attr(g4)
+```
+
+Na prostym przykładzie pokazaliśmy jak wygląda sytuacja naszego przykładu z prezentami oraz rozdzielenie osób na płeć:
+
+```{r}
+
+plot(g4, edge.arrow.size=.5, vertex.label.color="black", vertex.label.dist=1.5,
+
+     vertex.color=c( "pink", "skyblue")[1+(V(g4)$gender=="male")] ) 
+
+```
+
+Jeżeli dostalibyśmy dane od innej osoby, bardzo łatwo z nich stworzyć takie grafy:
+
+```{r}
+nodes <- read.csv("Dataset1-Media-Example-NODES.csv", header=T, as.is=T)
+
+links <- read.csv("Dataset1-Media-Example-EDGES.csv", header=T, as.is=T)
+```
+
+```{r}
+head(nodes)
+
+head(links)
+```
+
+```{r}
+net <- graph_from_data_frame(d=links, vertices=nodes, directed=T) 
+net
+```
+
+```{r}
+plot(net, edge.arrow.size=.4,vertex.label=NA)
+```
+
+Za pomocą funkcji simplify możemy usunąć krawędzie, które prowadzą do pętli:
+
+```{r}
+net <- simplify(net, remove.multiple = F, remove.loops = T) 
+```
+
+```{r}
+plot(net, edge.arrow.size=.4,vertex.label=NA)
+```
+
+W zależności, jakie dane miały być pokazane na grafie, modyfikujemy go według naszych preferencji:
+
+```{r}
+plot(net, edge.arrow.size=.2, edge.curved=0,
+
+     vertex.color="orange", vertex.frame.color="#555555",
+
+     vertex.label=V(net)$media, vertex.label.color="black",
+
+     vertex.label.cex=.7) 
+```
+
+Można również go zmienić mając stan obecnego grafu na bardziej pokazujący, jaki portal do wiadomości jest najpopularniejszy w zależności od kategorii:
+
+```{r}
+colrs <- c("lightgreen", "tomato", "gold")
+V(net)$color <- colrs[V(net)$media.type]
+V(net)$size <- V(net)$audience.size
+E(net)$arrow.size <- .2
+E(net)$edge.color <- "blue"
+E(net)$width <- 1+E(net)$weight/12
+
+plot(net, vertex.label=V(net)$media, 
+     vertex.label.font=2, vertex.label.color="gray40",
+     vertex.label.cex=.7, vertex.dist=2)
+
+
+legend("topright", legend=c("Newspaper", "Television", "Online News"), 
+       col=colrs, pch=21, pt.bg=colrs, pt.cex=2, cex=0.8)
+```
+```{r}
+library('visNetwork') 
+visNetwork(nodes, links, width="100%", height="400px")
+```
+
+```{r}
+vis.nodes <- nodes
+vis.links <- links
+
+vis.nodes$shape  <- "dot"  
+vis.nodes$shadow <- TRUE # Nodes will drop shadow
+vis.nodes$title  <- vis.nodes$media # Text on click
+vis.nodes$label  <- vis.nodes$type.label # Node label
+vis.nodes$size   <- vis.nodes$audience.size # Node size
+vis.nodes$borderWidth <- 2 # Node border width
+
+vis.nodes$color.background <- c("lightgreen", "tomato", "gold")[nodes$media.type]
+vis.nodes$color.border <- "black"
+vis.nodes$color.highlight.background <- "orange"
+vis.nodes$color.highlight.border <- "darkred"
+
+vis.links$width <- 1+links$weight/10
+vis.links$color <- "blue"    
+vis.links$arrows <- "middle" 
+
+visNetwork(vis.nodes, vis.links)
+
+vis.links$smooth <- FALSE   
+vis.links$shadow <- FALSE   
+
+visnet <- visNetwork(vis.nodes, vis.links)
+visnet
+```
+```{r}
+visOptions(visnet, highlightNearest = TRUE, selectedBy = "label")
+```
+
+Na koniec ładne struktury z wykorzystaniem network visualization:
+
+```{r}
+net.bg <- sample_pa(80) 
+
+V(net.bg)$size <- 8
+
+V(net.bg)$frame.color <- "white"
+
+V(net.bg)$color <- "orange"
+
+V(net.bg)$label <- "" 
+
+E(net.bg)$arrow.mode <- 0
+
+par(mfrow=c(2,2), mar=c(0,0,0,0)) 
+
+plot(net.bg, layout=layout_with_fr)
+
+plot(net.bg, layout=layout_with_fr)
+
+```
